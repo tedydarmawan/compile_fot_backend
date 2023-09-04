@@ -1,0 +1,92 @@
+name: Compile and Deploy Server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  test-server:
+    permissions: write-all
+    environment: env-backend
+    runs-on: ubuntu-latest
+    steps:
+    - name: Cek Server
+      uses: appleboy/ssh-action@v0.1.7
+      with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.PASSWORD }}
+          port: ${{ secrets.PORT }}
+          script: |
+              whoami
+              sudo su
+              cd /var/www/html/
+              ls
+              cd /home/dev/1git/
+              ls
+              echo "Success Cek Server"
+  build:
+    needs: [test-server]
+    permissions: write-all
+    environment: env-backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up JDK 8
+        uses: actions/setup-java@v3
+        with:
+          java-version: "8"
+          distribution: "adopt"
+      - name: Build with Maven
+        run: mvn package
+      - run: ls
+      - run: ls -l 'target'
+      - name: Copy Jar to Server
+        uses: garygrossgarten/github-action-scp@release
+        with:
+          local: target/demo-0.0.1-SNAPSHOT.jar
+          remote: /home/dev/1git/tedy/backend/demo-0.0.1-SNAPSHOT.jar
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.PASSWORD }}
+
+  Deploy-to-server:
+    needs: [build]
+    permissions: write-all
+    environment: env-backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.PASSWORD }}
+          port: ${{ secrets.PORT }}
+          script: |
+            whoami
+            sudo sh /home/dev/2runscript/run-tedy.sh
+      - name: Send mail
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: mail.logix.my.id
+          # Server port, default 25:
+          server_port: 465
+          # Optional whether this connection use TLS (default is true if server_port is 465)
+          secure: true
+          # Optional (recommended) mail server username:
+          username: no-reply@logix.my.id
+          # Optional (recommended) mail server password:
+          password: Logix2021
+          # Required mail subject:
+          subject: ${{github.event.head_commit.message}} BACKEND
+          # Required recipients' addresses:
+          to: tedy.darmawan@gmail.com
+          # Required sender full name (address can be skipped):
+          from: BACKEND-ANDRE # <user@example.com>
+          # Optional plain body:
+          body: ${{github.repository}} Compile and Running in Server Success!
+          priority: high
